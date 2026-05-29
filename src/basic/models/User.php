@@ -4,94 +4,163 @@ declare(strict_types=1);
 
 namespace app\models;
 
-use yii\base\BaseObject;
+use Yii;
+use yii\db\ActiveRecord;
 use yii\web\IdentityInterface;
 
-class User extends BaseObject implements IdentityInterface
+/**
+ * Модель User для таблицы "user"
+ *
+ * @property int $id
+ * @property string $username
+ * @property string $email
+ * @property string $password_hash
+ * @property string|null $auth_key
+ * @property int $status
+ * @property string $created_at
+ * @property string $updated_at
+ */
+class User extends ActiveRecord implements IdentityInterface
 {
-    public int|string $id = '';
-    public string $username = '';
-    public string $passwordHash = '';
-    public string $authKey = '';
-    public string $accessToken = '';
-    private static array $_users = [
-        '100' => [
-            'id' => '100',
-            'username' => 'admin',
-            // password: admin
-            'passwordHash' => '$2y$13$gYAywKSkhfZDq9FLNdm7buKnvlRxDexf5xipSMAxQPDUxpaptmZJu',
-            'authKey' => 'test100key',
-            'accessToken' => '100-token',
-        ],
-        '101' => [
-            'id' => '101',
-            'username' => 'demo',
-            // password: demo
-            'passwordHash' => '$2y$13$alRLq1PGVMlGYwS/Y3iy3ewQns1Z8ol8Iq6Zb5k7ZwEhblA1aL29y',
-            'authKey' => 'test101key',
-            'accessToken' => '101-token',
-        ],
-    ];
+    const STATUS_ACTIVE = 10;
+    const STATUS_DELETED = 0;
+
     /**
-     * {@inheritdoc}
+     * Имя таблицы
      */
-    public static function findIdentity($id): static|null
+    public static function tableName(): string
     {
-        return isset(self::$_users[$id]) ? new static(self::$_users[$id]) : null;
+        return '{{%user}}';
     }
 
     /**
-     * {@inheritdoc}
+     * Правила валидации
      */
-    public static function findIdentityByAccessToken($token, $type = null): static|null
+    public function rules(): array
     {
-        foreach (self::$_users as $user) {
-            if ($user['accessToken'] === $token) {
-                return new static($user);
-            }
-        }
+        return [
+            [['username', 'email', 'password_hash'], 'required'],
+            [['username', 'email'], 'unique'],
+            [['status'], 'integer'],
+            [['created_at', 'updated_at'], 'safe'],
 
-        return null;
+            [['username', 'email', 'password_hash', 'auth_key'], 'string', 'max' => 255],
+            ['email', 'email'],
+        ];
     }
 
     /**
-     * Finds user by username
-     *
-     * @param string $username
-     * @return static|null
+     * Названия атрибутов
      */
-    public static function findByUsername(string $username): static|null
+    public function attributeLabels(): array
     {
-        foreach (self::$_users as $user) {
-            if (strcasecmp($user['username'], $username) === 0) {
-                return new static($user);
-            }
-        }
-
-        return null;
+        return [
+            'id' => 'ID',
+            'username' => 'Логин',
+            'email' => 'Email',
+            'password_hash' => 'Хэш пароля',
+            'auth_key' => 'Ключ авторизации',
+            'status' => 'Статус',
+            'created_at' => 'Создан',
+            'updated_at' => 'Обновлен',
+        ];
     }
 
     /**
-     * {@inheritdoc}
+     * Автоматическое заполнение дат
      */
-    public function getId(): int|string
+    public function behaviors(): array
+    {
+        return [
+            [
+                'class' => \yii\behaviors\TimestampBehavior::class,
+                'createdAtAttribute' => 'created_at',
+                'updatedAtAttribute' => 'updated_at',
+                'value' => function () {
+                    return date('Y-m-d H:i:s');
+                },
+            ],
+        ];
+    }
+
+    /**
+     * Поиск пользователя по ID
+     */
+    public static function findIdentity($id): ?IdentityInterface
+    {
+        return static::findOne([
+            'id' => $id,
+        ]);
+    }
+
+    /**
+     * Поиск пользователя по access token
+     */
+    public static function findIdentityByAccessToken($token, $type = null): ?IdentityInterface
+    {
+        return static::findOne([
+            'auth_key' => $token,
+        ]);
+    }
+
+    /**
+     * Поиск по username
+     */
+    public static function findByUsername(string $username): ?self
+    {
+        return static::findOne([
+            'username' => $username,
+        ]);
+    }
+
+    /**
+     * ID пользователя
+     */
+    public function getId(): int
     {
         return $this->id;
     }
 
     /**
-     * {@inheritdoc}
+     * Auth key
      */
-    public function getAuthKey(): string|null
+    public function getAuthKey(): ?string
     {
-        return $this->authKey;
+        return $this->auth_key;
     }
 
     /**
-     * {@inheritdoc}
+     * Проверка auth key
      */
     public function validateAuthKey($authKey): bool
     {
-        return $this->authKey === $authKey;
+        return $this->auth_key === $authKey;
+    }
+
+    /**
+     * Проверка пароля
+     */
+    public function validatePassword(string $password): bool
+    {
+        return Yii::$app->security->validatePassword(
+            $password,
+            $this->password_hash
+        );
+    }
+
+    /**
+     * Установка пароля
+     */
+    public function setPassword(string $password): void
+    {
+        $this->password_hash = Yii::$app->security->generatePasswordHash($password);
+    }
+
+    /**
+     * Генерация auth key
+     */
+    public function generateAuthKey(): void
+    {
+        $this->auth_key = Yii::$app->security->generateRandomString();
     }
 }

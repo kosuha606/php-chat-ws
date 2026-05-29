@@ -20,6 +20,8 @@ services:
     container_name: php84_app
     restart: unless-stopped
     user: "${CURRENT_UID}:${CURRENT_GID}"
+    environment:
+      - COMPOSER_HOME=/var/www/html/.composer
     volumes:
       - ./src:/var/www/html
     depends_on:
