@@ -19,6 +19,7 @@ services:
       dockerfile: Dockerfile
     container_name: php84_app
     restart: unless-stopped
+    user: "${CURRENT_UID}:${CURRENT_GID}"
     volumes:
       - ./src:/var/www/html
     depends_on:
